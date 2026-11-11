@@ -1,283 +1,348 @@
-# 📦 سامانه مدیریت هوشمند انبار امدادی و توزیع اقلام
+# 📦 Smart Emergency Warehouse Management & Relief Distribution System
 
-این پروژه یک **قالب کامل و آماده‌ی کار (Starter Kit / Boilerplate)** برای پیاده‌سازی سامانه مدیریت انبار امدادی است — دقیقاً بر اساس فرم مساله‌ای که ارسال کردید (حوزه ICT، جریان کاری «دریافت → نگهداری → تخصیص → تحویل»).
+**A comprehensive, extensible MVP for managing emergency supplies, warehouse inventory, and relief distribution operations.**
 
-هدف این نیست که یک محصول نهایی و صددرصد تکمیل تحویل بگیرید؛ هدف این است که یک **معماری درست، تست‌شده از نظر ساختار، و کاملاً مستند** در اختیار داشته باشید تا بقیه‌ی کار (UI نهایی، تست‌های خودکار، دیپلوی واقعی) را روی آن پیش ببرید.
+Designed and developed independently by **Vida Khoshpey**.
 
----
+This project aims to provide a structured and practical solution for managing emergency warehouse operations, covering the complete inventory lifecycle:
 
-## ۱. فهرست مطالب
+**Receiving → Storage → Allocation → Distribution**
 
-1. [معماری کلی سیستم](#۲-معماری-کلی-سیستم)
-2. [ساختار پوشه‌ها](#۳-ساختار-پوشه‌ها)
-3. [مدل داده (ERD ساده)](#۴-مدل-داده)
-4. [جریان کاری اصلی انبار](#۵-جریان-کاری-اصلی-انبار)
-5. [راه‌اندازی سریع با Docker](#۶-راه‌اندازی-سریع-با-docker)
-6. [راه‌اندازی دستی (بدون Docker)](#۷-راه‌اندازی-دستی)
-7. [نقش‌ها و سطوح دسترسی](#۸-نقش‌ها-و-سطوح-دسترسی)
-8. [مستندات API](#۹-مستندات-api)
-9. [مراحل بعدی پیشنهادی](#۱۰-مراحل-بعدی-پیشنهادی-برای-ادامه-پروژه)
-10. [نکات امنیتی قبل از Production](#۱۱-نکات-امنیتی-قبل-از-production)
+It focuses on inventory accuracy, operational traceability, role-based access control, and efficient resource distribution.
+
+Rather than being a simple inventory tracker, the system provides a modular foundation for managing warehouse workflows, tracking inventory movements, organizing distribution missions, and generating operational reports.
+
+> **Project status:** Independently developed MVP. Open to improvements, contributions, feature extensions, and community feedback.
 
 ---
 
-## ۲. معماری کلی سیستم
+## ✨ Key Features
 
-معماری از الگوی **Layered Architecture** (معماری لایه‌ای) پیروی می‌کند تا کد قابل نگهداری، تست و توسعه باشد:
+- **Inventory Management:** Manage products, stock quantities, warehouse locations, and inventory batches.
+- **Batch Tracking:** Track expiration dates, batch numbers, and storage locations.
+- **FEFO Support:** Structure inventory operations around the First Expired, First Out principle.
+- **Emergency Distribution:** Create and manage distribution missions and allocate supplies.
+- **Inventory Transactions:** Record receiving, allocation, issuing, transfers, and stock adjustments.
+- **Role-Based Access Control (RBAC):** Separate permissions for administrators, operators, and warehouse staff.
+- **Audit Trail:** Maintain records of important operational changes.
+- **Reporting:** Monitor current stock, low-stock items, expiring batches, and inventory turnover.
+- **RESTful API:** Provide structured API endpoints through FastAPI.
+- **Containerization:** Support deployment through Docker Compose.
+- **Database Migrations:** Use Alembic to manage database schema changes.
 
+## 🏗️ Architecture
+
+The application follows a layered architecture to improve maintainability, separation of concerns, and future extensibility.
+
+```text
+┌──────────────────────────────────────────────┐
+│                 Frontend                     │
+│              React + Axios                   │
+│                                              │
+│  Pages → Auth Context → API Client           │
+└──────────────────────┬───────────────────────┘
+                       │ HTTP / JSON
+┌──────────────────────▼───────────────────────┐
+│                 Backend                      │
+│                 FastAPI                      │
+│                                              │
+│  ┌────────────────────────────────────────┐  │
+│  │ API Layer                              │  │
+│  │ Routes, Validation, Authentication     │  │
+│  └────────────────────┬───────────────────┘  │
+│                       │                      │
+│  ┌────────────────────▼───────────────────┐  │
+│  │ Service Layer                          │  │
+│  │ Inventory & Reporting Business Logic  │  │
+│  └────────────────────┬───────────────────┘  │
+│                       │                      │
+│  ┌────────────────────▼───────────────────┐  │
+│  │ Data Layer                             │  │
+│  │ SQLAlchemy ORM Models                  │  │
+│  └────────────────────┬───────────────────┘  │
+└───────────────────────┼──────────────────────┘
+                        │
+               ┌────────▼────────┐
+               │   PostgreSQL    │
+               └─────────────────┘
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Frontend (React)                    │
-│   صفحات → Context (Auth) → Axios Client → REST API       │
-└───────────────────────────┬─────────────────────────────┘
-                             │ HTTP/JSON (JWT در هدر)
-┌───────────────────────────▼─────────────────────────────┐
-│                    Backend (FastAPI)                      │
-│  ┌───────────────────────────────────────────────────┐   │
-│  │ API Layer (routes/*)                               │   │
-│  │   - اعتبارسنجی ورودی (Pydantic Schemas)             │   │
-│  │   - احراز هویت و کنترل دسترسی (deps.py / RBAC)      │   │
-│  └───────────────────────┬───────────────────────────┘   │
-│  ┌───────────────────────▼───────────────────────────┐   │
-│  │ Service Layer (services/*)                         │   │
-│  │   - منطق کسب‌وکار (inventory_service, report_service)│   │
-│  │   - قوانین: تخصیص نباید از موجودی بیشتر شود، و...   │   │
-│  └───────────────────────┬───────────────────────────┘   │
-│  ┌───────────────────────▼───────────────────────────┐   │
-│  │ Data Layer (models/* + SQLAlchemy ORM)              │   │
-│  └───────────────────────┬───────────────────────────┘   │
-└───────────────────────────┼─────────────────────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   PostgreSQL     │
-                    └──────────────────┘
-```
 
-**چرا این لایه‌بندی؟**
-- `routes` فقط مسئول HTTP است (ورودی/خروجی، کد وضعیت، دسترسی).
-- `services` قلب منطق تجاری است؛ کاملاً مستقل از FastAPI، پس در آینده قابل تست واحد (Unit Test) و قابل استفاده مجدد در یک CLI یا Job زمان‌بندی‌شده است.
-- `models` فقط ساختار داده را توصیف می‌کند.
+### Technology Stack
 
-این جداسازی دقیقاً همان چیزی است که در الزامات آموزشی فرم شما خواسته شده: «طراحی فرآیندهای انبارداری» به‌صورت شفاف در یک لایه مجزا (`inventory_service.py`) پیاده شده است.
+| Component | Technology |
+|---|---|
+| Backend | Python, FastAPI |
+| Frontend | React |
+| Database | PostgreSQL |
+| ORM | SQLAlchemy |
+| Authentication | JWT |
+| Data Validation | Pydantic |
+| Database Migrations | Alembic |
+| HTTP Client | Axios |
+| Deployment | Docker, Docker Compose |
+| Web Server | Nginx |
 
 ---
 
-## ۳. ساختار پوشه‌ها
+## 📁 Project Structure
 
-```
+```text
 warehouse-project/
 ├── backend/
 │   ├── app/
-│   │   ├── core/               # تنظیمات، اتصال دیتابیس، امنیت (JWT/هش رمز)
+│   │   ├── core/
 │   │   │   ├── config.py
 │   │   │   ├── database.py
 │   │   │   └── security.py
-│   │   ├── models/             # مدل‌های ORM (جدول‌های دیتابیس)
-│   │   │   ├── user.py / item.py / location.py / batch.py
-│   │   │   ├── mission.py / transaction.py / audit.py
-│   │   │   └── enums.py
-│   │   ├── schemas/            # اسکیمای ورودی/خروجی API (Pydantic)
-│   │   ├── services/           # منطق کسب‌وکار
-│   │   │   ├── inventory_service.py   # ← قلب سیستم: دریافت/تخصیص/خروج/جابجایی/اصلاح
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   │   ├── inventory_service.py
 │   │   │   └── report_service.py
 │   │   ├── api/
-│   │   │   ├── deps.py         # احراز هویت + RBAC
-│   │   │   └── routes/         # اندپوینت‌های REST
-│   │   ├── main.py             # نقطه ورود FastAPI
-│   │   └── seed.py             # داده‌ی اولیه (کاربر ادمین + نمونه‌ها)
-│   ├── alembic/                # مهاجرت دیتابیس (Migrations)
+│   │   │   ├── deps.py
+│   │   │   └── routes/
+│   │   ├── main.py
+│   │   └── seed.py
+│   ├── alembic/
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── api/client.js       # نمونه Axios با Interceptor توکن
-│   │   ├── context/AuthContext.jsx
-│   │   ├── components/         # Layout, Sidebar, DataTable, ProtectedRoute
-│   │   └── pages/               # Login, Dashboard, Items, Inventory,
-│   │                            # Receiving, Issue, Missions, Reports, Users
+│   │   ├── api/
+│   │   ├── context/
+│   │   ├── components/
+│   │   └── pages/
 │   ├── Dockerfile
 │   └── nginx.conf
-├── docker-compose.yml           # راه‌اندازی کل پروژه با یک دستور
-└── README.md                    # همین فایل
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
 
-## ۴. مدل داده
+## 🗄️ Database Design
 
-نکته کلیدی مدل‌سازی: **Item ≠ Batch**. `Item` شناسنامه کالاست (مثلاً «کنسرو لوبیا»)، اما موجودی واقعی در `Batch` نگهداری می‌شود چون یک کالا می‌تواند چند بار با تاریخ انقضا و مکان متفاوت وارد انبار شود (لازم برای اصل FEFO: اول منقضی‌شونده، اول خارج‌شونده).
+One of the main design considerations is the separation between a product and its physical inventory batches.
 
-```
-User ──< Transaction >── Mission
-  │            │
-  │            ▼
-  │          Batch ──> Location
-  │            │
-  │            ▼
-  └────────> Item
-```
+An `Item` represents a product definition, while a `Batch` represents an actual quantity of that product stored at a particular location, potentially with its own expiration date and batch number.
 
-| جدول | نقش |
+This separation enables more accurate inventory tracking and supports expiration-aware stock allocation.
+
+### Main Entities
+
+| Entity | Responsibility |
 |---|---|
-| **users** | کاربران سیستم با نقش (admin/operator/warehouse) |
-| **items** | شناسنامه کالا (SKU): کد، نام، واحد، حداقل موجودی |
-| **locations** | مکان فیزیکی نگهداری (قفسه/ردیف) |
-| **batches** | موجودی واقعی: کالا + مکان + شماره بچ + تاریخ انقضا + `quantity_on_hand` + `quantity_allocated` |
-| **missions** | درخواست/مأموریت توزیع |
-| **transactions** | دفتر کل گردش کالا (Append-Only Ledger) — هرگز حذف/ویرایش نمی‌شود |
-| **audit_logs** | لاگ تغییرات حیاتی (Audit Trail) |
+| Users | System accounts and access roles |
+| Items | Product definitions and SKU information |
+| Locations | Physical warehouse storage locations |
+| Batches | Actual inventory quantities and expiration data |
+| Missions | Emergency distribution requests |
+| Transactions | Inventory movement ledger |
+| Audit Logs | Records of important system changes |
 
 ---
 
-## ۵. جریان کاری اصلی انبار
+## 🔄 Core Warehouse Workflow
 
-این همان جریانی است که در تعریف مساله خواسته شده: **دریافت → نگهداری → تخصیص → تحویل**
+The system is organized around five primary inventory operations.
 
-1. **دریافت (Receiving)** → `POST /api/transactions/receive`
-   کالا وارد انبار می‌شود؛ اگر بچ مشابه وجود نداشته باشد ساخته می‌شود.
-2. **نگهداری** → خودِ رکورد `Batch` (کالا در `location_id` مشخص نگهداری می‌شود).
-3. **تخصیص (Allocation)** → `POST /api/transactions/allocate`
-   مقداری از یک بچ به یک مأموریت رزرو می‌شود (`quantity_allocated` بالا می‌رود) — موجودی فیزیکی هنوز کم نمی‌شود.
-4. **تحویل/خروج (Issue)** → `POST /api/transactions/issue`
-   خروج نهایی و واقعی کالا؛ اینجا `quantity_on_hand` کاهش می‌یابد و گیرنده/مقصد ثبت می‌شود.
+### 1. Receiving
+Register incoming supplies and add them to warehouse inventory.
 
-علاوه بر این چهار مرحله، دو عملیات پشتیبان هم وجود دارد:
-- **جابجایی (Transfer)**: انتقال موجودی بین دو مکان.
-- **اصلاح موجودی (Adjustment)**: برای زمانی که شمارش فیزیکی انبار با عدد سیستم فرق دارد (فقط نقش ادمین).
+`POST /api/transactions/receive`
 
-هر یک از این ۵ عملیات، همزمان یک رکورد در `transactions` ثبت می‌کند تا **رهگیری کامل و قابل حسابرسی** (دقیقاً الزام «دقت داده و کاهش اختلاف موجودی» در فرم شما) تضمین شود.
+### 2. Allocation
+Reserve available quantities for a specific distribution mission without immediately reducing physical stock.
+
+`POST /api/transactions/allocate`
+
+### 3. Issuing & Distribution
+Record the actual release and delivery of supplies.
+
+`POST /api/transactions/issue`
+
+### 4. Stock Transfer
+Move inventory between warehouse locations.
+
+`POST /api/transactions/transfer`
+
+### 5. Stock Adjustment
+Correct inventory discrepancies based on physical stock counts.
+
+`POST /api/transactions/adjust`
+
+These operations are designed to maintain transaction history and improve inventory traceability.
 
 ---
 
-## ۶. راه‌اندازی سریع با Docker
+## 🔐 Roles & Permissions
 
-این ساده‌ترین و توصیه‌شده‌ترین روش است.
+The application supports three primary roles:
+
+| Role | Access |
+|---|---|
+| Admin | Full system management, user administration, inventory adjustments, and reporting |
+| Operator | Product and location management, inventory operations, and distribution missions |
+| Warehouse Staff | Physical receiving and issuing operations |
+
+Access control is handled at the API layer rather than relying solely on frontend restrictions.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+- Git
+
+For manual installation:
+
+- Python
+- Node.js and npm
+- PostgreSQL
+
+### Installation with Docker
+
+Clone the repository:
 
 ```bash
-# ۱. وارد پوشه پروژه شوید
-cd warehouse-project
+git clone git@github.com:VIDAKHOSHPEY22/warehouse_project.git
 
-# ۲. فایل env بک‌اند را بسازید
+cd warehouse_project
+```
+
+Configure environment variables:
+
+```bash
 cp backend/.env.example backend/.env
-# (در صورت تمایل SECRET_KEY را در backend/.env عوض کنید)
+```
 
-# ۳. همه سرویس‌ها را بالا بیاورید
+Review the environment configuration and update sensitive values before starting the application.
+
+Build and start the services:
+
+```bash
 docker compose up -d --build
+```
 
-# ۴. جدول‌ها و داده‌ی اولیه را بسازید (کاربر ادمین + چند نمونه)
+Initialize the database and seed initial data:
+
+```bash
 docker compose exec backend python -m app.seed
 ```
 
-بعد از این مراحل:
-- فرانت‌اند: **http://localhost**
-- مستندات تعاملی API (Swagger): **http://localhost:8000/docs**
-- ورود پیش‌فرض: `admin` / `Admin@12345`
+### Access the Application
 
-> ⚠️ رمز پیش‌فرض را حتماً همان روز اول عوض کنید.
-
----
-
-## ۷. راه‌اندازی دستی
-
-### بک‌اند
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate   # ویندوز: venv\Scripts\activate
-pip install -r requirements.txt
-
-cp .env.example .env
-# DATABASE_URL را با اطلاعات PostgreSQL خودتان تنظیم کنید
-
-python -m app.seed          # ساخت جدول‌ها + داده اولیه
-uvicorn app.main:app --reload
-```
-
-### فرانت‌اند
-```bash
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
-```
-فرانت‌اند روی `http://localhost:5173` بالا می‌آید و درخواست‌های `/api` را به `http://localhost:8000` پروکسی می‌کند (تنظیم‌شده در `vite.config.js`).
-
-### مهاجرت‌های دیتابیس با Alembic (برای تغییرات بعدی مدل‌ها)
-```bash
-cd backend
-alembic revision --autogenerate -m "توضیح تغییر"
-alembic upgrade head
-```
-
----
-
-## ۸. نقش‌ها و سطوح دسترسی
-
-| نقش | دسترسی |
+| Service | URL |
 |---|---|
-| **admin** (مدیر سیستم) | دسترسی کامل: کاربران، اقلام، مکان‌ها، اصلاح موجودی، همه گزارش‌ها |
-| **operator** (کارشناس عملیات) | تعریف کالا/مکان، ثبت ورود/تخصیص/خروج/جابجایی، مدیریت مأموریت‌ها |
-| **warehouse** (انباردار) | فقط ثبت فیزیکی ورود و خروج کالا (Receiving / Issue) |
+| Frontend | http://localhost |
+| Backend API | http://localhost:8000 |
+| Interactive API Documentation | http://localhost:8000/docs |
 
-کنترل دسترسی در لایه API با `require_roles(...)` در `app/api/deps.py` پیاده‌سازی شده — یعنی حتی اگر کسی مستقیم به API درخواست بزند (نه از طریق پنل)، محدودیت‌ها اعمال می‌شود.
+**Important:** If the seed process creates a default administrator account, change its initial password immediately. Never use development credentials in a public deployment.
 
 ---
 
-## ۹. مستندات API
+## 🧩 API Overview
 
-بعد از بالا آوردن بک‌اند، مستندات کامل و تعاملی (Swagger UI) به‌صورت خودکار در آدرس زیر در دسترس است:
+The application provides RESTful endpoints for authentication, inventory management, warehouse locations, distribution missions, transactions, and reporting.
 
-**http://localhost:8000/docs**
-
-خلاصه‌ی اندپوینت‌های اصلی:
-
-| متد | مسیر | توضیح |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/auth/login` | ورود و دریافت توکن |
-| GET | `/api/auth/me` | اطلاعات کاربر جاری |
-| GET/POST | `/api/items` | لیست/ایجاد کالا |
-| GET/POST | `/api/locations` | لیست/ایجاد مکان |
-| GET | `/api/batches` | موجودی بچ‌ها |
-| GET/POST | `/api/missions` | لیست/ایجاد مأموریت |
-| POST | `/api/transactions/receive` | ثبت ورود کالا |
-| POST | `/api/transactions/allocate` | تخصیص به مأموریت |
-| POST | `/api/transactions/issue` | ثبت خروج/تحویل |
-| POST | `/api/transactions/transfer` | جابجایی بین مکان‌ها |
-| POST | `/api/transactions/adjust` | اصلاح موجودی (فقط ادمین) |
-| GET | `/api/reports/current-stock` | موجودی لحظه‌ای |
-| GET | `/api/reports/low-stock` | اقلام کم‌موجود |
-| GET | `/api/reports/expiring-batches` | نزدیک به انقضا |
-| GET | `/api/reports/turnover` | گردش کالا |
+| POST | `/api/auth/login` | User authentication |
+| GET | `/api/auth/me` | Current user information |
+| GET / POST | `/api/items` | List and create products |
+| GET / POST | `/api/locations` | List and create locations |
+| GET | `/api/batches` | Retrieve inventory batches |
+| GET / POST | `/api/missions` | Manage distribution missions |
+| POST | `/api/transactions/receive` | Receive supplies |
+| POST | `/api/transactions/allocate` | Allocate inventory |
+| POST | `/api/transactions/issue` | Issue supplies |
+| POST | `/api/transactions/transfer` | Transfer stock |
+| POST | `/api/transactions/adjust` | Adjust inventory |
+| GET | `/api/reports/current-stock` | Current inventory report |
+| GET | `/api/reports/low-stock` | Low-stock report |
+| GET | `/api/reports/expiring-batches` | Expiration report |
+| GET | `/api/reports/turnover` | Inventory turnover report |
+
+For the complete interactive API reference, visit `/docs` after starting the backend.
 
 ---
 
-## ۱۰. مراحل بعدی پیشنهادی برای ادامه پروژه
+## 🛣️ Future Development
 
-این قالب پایه، الزامات فنی و آموزشی فرم شما را پوشش می‌دهد، اما برای رساندن آن به سطح یک MVP قابل ارائه پیشنهاد می‌کنم به ترتیب زیر ادامه دهید:
+This project is designed to be extensible. Potential improvements include:
 
-1. **تولید و اسکن بارکد/QR** (نکته اختیاری فرم): یک کتابخانه مثل `qrcode` (پایتون) برای تولید و `html5-qrcode` (فرانت) برای اسکن با موبایل اضافه کنید.
-2. **صفحه گزارش گرافیکی**: نمودار روند ورود/خروج با یک کتابخانه مثل Recharts در `Reports.jsx`.
-3. **تست خودکار**: با `pytest` برای `services/inventory_service.py` (چون کاملاً مستقل از FastAPI نوشته شده، تست‌نویسی ساده است).
-4. **صفحه ویرایش/حذف** برای اقلام، مکان‌ها و مأموریت‌ها (در حال حاضر فقط ایجاد و مشاهده در فرانت پیاده شده، ولی API حذف/ویرایش آماده است).
-5. **حالت آفلاین محدود** (نکته فاز بعدی فرم): با Service Worker یا صف محلی برای همگام‌سازی بعدی.
-6. **بکاپ زمان‌بندی‌شده PostgreSQL**: یک cron ساده با `pg_dump` روی VPS.
+- Barcode and QR code generation and scanning.
+- Advanced inventory analytics and visualization.
+- Expanded automated test coverage.
+- Enhanced offline operation and data synchronization.
+- Automated database backups and recovery.
+- Additional warehouse and distribution workflows.
+- Further security and deployment improvements.
 
----
-
-## ۱۱. نکات امنیتی قبل از Production
-
-- [ ] `SECRET_KEY` را در `backend/.env` به یک مقدار تصادفی و طولانی تغییر دهید (`openssl rand -hex 32`).
-- [ ] رمز پیش‌فرض ادمین (`Admin@12345`) را بلافاصله بعد از اولین ورود عوض کنید.
-- [ ] `CORS_ORIGINS` را فقط به دامنه واقعی فرانت‌اند محدود کنید (نه `*`).
-- [ ] SSL/HTTPS را روی VPS (مثلاً با Nginx + Let's Encrypt / Certbot) فعال کنید.
-- [ ] رمز دیتابیس در `docker-compose.yml` را عوض کرده و در یک فایل `.env` جدا نگه دارید (در نسخه فعلی برای سادگی مستقیم نوشته شده).
-- [ ] بکاپ‌گیری خودکار و دوره‌ای از Volume دیتابیس (`pgdata`) را فعال کنید.
+These are potential development directions, not claims that every feature is already implemented.
 
 ---
 
-### جمع‌بندی
+## 🔒 Security & Production Considerations
 
-این پروژه یک اسکلت کامل، تمیز و قابل توسعه است که مستقیماً روی الزامات فرم شما (FastAPI + PostgreSQL + React، مدل‌سازی SKU/Batch/Location، RBAC، Audit Trail، گزارش‌گیری) بنا شده. هر فایل با کامنت فارسی مستند شده تا بدون نیاز به توضیح اضافه، مستقیم بتوانید ادامه‌اش دهید.
+Before deploying this project in a production environment:
 
-موفق باشید 🌱
+- Generate a strong and unique `SECRET_KEY`.
+- Change all default credentials.
+- Store sensitive configuration in environment variables.
+- Restrict CORS origins to trusted domains.
+- Enable HTTPS.
+- Secure database credentials and Docker configuration.
+- Configure automated database backups.
+- Review authentication, authorization, and audit logging.
+- Run appropriate automated and integration tests.
+
+This repository represents an MVP and should undergo security review and deployment validation before handling real emergency or humanitarian operations.
+
+---
+
+## 🤝 Contributions & Community
+
+This project was independently designed and developed by me, and I am happy to share it with the developer community.
+
+I consider this project an evolving foundation rather than a closed implementation.
+
+**I would genuinely appreciate your feedback, suggestions, improvements, and contributions.**
+
+Whether you find a bug, identify an architectural improvement, suggest a new feature, or want to improve the existing implementation, your contribution is welcome.
+
+Feel free to:
+
+- Open an issue.
+- Submit a pull request.
+- Suggest new features.
+- Improve documentation.
+- Share ideas for making the system more reliable and useful.
+
+I would be happy to see the project improved and updated through community collaboration.
+
+---
+
+## 👩‍💻 Author
+
+**Vida Khoshpey**
+
+Independent Developer | Programming Instructor | Founder of Dumirror
+
+- GitHub: [@VIDAKHOSHPEY22](https://github.com/VIDAKHOSHPEY22)
+
+---
+
+## ⭐ Support the Project
+
+If you find this project useful, consider giving it a star ⭐
+
+Your feedback and contributions help make it better.
+
+**Built independently with a focus on practical software engineering, maintainable architecture, and meaningful real-world applications.**
