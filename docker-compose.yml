@@ -1,0 +1,54 @@
+# ----------------------------------------------------------------
+# docker-compose.yml
+# راه‌اندازی کامل پروژه با یک دستور:
+#     docker compose up -d --build
+#     docker compose exec backend python -m app.seed
+#
+# سرویس‌ها:
+#   db       -> پایگاه‌داده PostgreSQL با Volume ماندگار برای بکاپ
+#   backend  -> API نوشته‌شده با FastAPI (پورت 8000)
+#   frontend -> پنل React سرو شده توسط Nginx (پورت 80)
+# ----------------------------------------------------------------
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: warehouse_user
+      POSTGRES_PASSWORD: warehouse_pass
+      POSTGRES_DB: warehouse_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U warehouse_user -d warehouse_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://warehouse_user:warehouse_pass@db:5432/warehouse_db
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:

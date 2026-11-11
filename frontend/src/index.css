@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* استایل‌های پایه سراسری */
+body {
+  @apply bg-gray-50 text-gray-800;
+}
+
+/* کلاس‌های کمکی تکرارشونده در کل پروژه - برای یکدست بودن ظاهر فرم‌ها و دکمه‌ها */
+.btn-primary {
+  @apply bg-brand-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.btn-secondary {
+  @apply bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition;
+}
+.input-field {
+  @apply w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500;
+}
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-5;
+}
+.table-base {
+  @apply w-full text-sm text-right border-collapse;
+}
+.table-base th {
+  @apply bg-gray-100 text-gray-600 font-semibold px-3 py-2 border-b border-gray-200;
+}
+.table-base td {
+  @apply px-3 py-2 border-b border-gray-100;
+}
